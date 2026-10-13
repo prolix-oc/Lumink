@@ -1,0 +1,13 @@
+{
+  "version": "0.1.1",
+  "name": "Lumink",
+  "identifier": "lumink",
+  "author": "Prolix OCs",
+  "github": "https://github.com/prolix-oc/Lumink",
+  "homepage": "https://github.com/prolix-oc/Lumink#readme",
+  "description": "An Apple Pencil-friendly sketchbook and jot pad. Draw with layers, share a PNG to chat, or save it to your device.",
+  "permissions": ["images", "chat_mutation"],
+  "entry_backend": "dist/backend.js",
+  "entry_frontend": "dist/frontend.js",
+  "minimum_lumiverse_version": "1.2.5"
+}
