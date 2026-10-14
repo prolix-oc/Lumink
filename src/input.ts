@@ -1,5 +1,6 @@
-import { clamp, MAX_STROKE_POINTS, type Drawing, type Point, type Stroke, type Tool } from './model'
+import { clamp, type Drawing, type PagePoint, type Point, type Stroke, type Tool } from './model'
 import { PenSmoother } from './smoothing'
+import { TwoFingerTap } from './touch-undo'
 export interface BrushSettings { tool: Tool; color: string; size: number; opacity: number; smoothing: number; pressure: boolean; penOnly: boolean; predictions: boolean }
 export interface PencilReading { pointer: string; pressure: number; tiltX: number; tiltY: number; samples: number; coalesced: boolean; predicted: boolean }
 export interface Camera { x: number; y: number; scale: number; rotation: number }
@@ -45,6 +46,9 @@ export class DrawingInput {
   // or restarting a gesture cannot apply the attraction repeatedly and creep the view.
   private rotationIntent = 0
   private pan: { pointerId: number; x: number; y: number } | null = null
+  private selecting: number | null = null
+  private touchTap = new TwoFingerTap()
+  private tapView: { camera: Camera; fitted: boolean; rotationIntent: number } | null = null
   private frame = 0
   private fitted = true
   private readingAt = 0
@@ -59,6 +63,7 @@ export class DrawingInput {
     private reading: (reading: PencilReading) => void,
     private cameraChange: (camera: Camera) => void,
     private warning: (message: string) => void,
+    private actions: { undo(): void; selection: { start(point: PagePoint): void; move(point: PagePoint): void; end(point: PagePoint): void; cancel(): void } },
   ) {
     const signal = this.abort.signal
     viewport.addEventListener('pointerdown', this.down, { signal })
@@ -73,7 +78,7 @@ export class DrawingInput {
     this.observer.observe(viewport)
     this.fit()
   }
-  get isDrawing() { return !!this.active }
+  get isDrawing() { return !!this.active || this.selecting !== null }
   fit() {
     const d = this.drawing(), width = this.viewport.clientWidth, height = this.viewport.clientHeight
     if (!width || !height) return
@@ -87,7 +92,7 @@ export class DrawingInput {
     this.fitted = false; this.updateCamera()
   }
   resetRotation() {
-    this.cancelStroke(); this.gesture = null; this.pan = null; this.pointers.clear()
+    this.cancelStroke(); this.gesture = null; this.pan = null; this.pointers.clear(); this.touchTap.reset(); this.tapView = null
     const x = this.viewport.clientWidth / 2, y = this.viewport.clientHeight / 2
     const [pageX, pageY] = screenToPage(x, y, this.camera)
     this.camera = cameraAtPoint(this.camera.scale, 0, pageX, pageY, x, y)
@@ -127,11 +132,15 @@ export class DrawingInput {
     if (event.pointerType === 'mouse' && event.button !== 0 && event.button !== 1) return
     event.preventDefault()
     // A resting palm must never move the sheet underneath an active Pencil stroke.
-    if (this.active && event.pointerId !== this.active.pointerId && event.pointerType !== 'touch') return
-    if (this.active && event.pointerType === 'touch' && this.pointers.get(this.active.pointerId)?.type === 'pen') return
+    if (this.isDrawing && event.pointerId !== (this.active?.pointerId ?? this.selecting) && event.pointerType !== 'touch') return
+    if (event.pointerType === 'touch' && this.pointers.get(this.active?.pointerId ?? this.selecting ?? -1)?.type === 'pen') return
     const location = this.location(event)
     if (event.pointerType === 'pen') {
-      this.cancelStroke(); this.pointers.clear(); this.pan = null; this.gesture = null
+      this.cancelStroke(); this.pointers.clear(); this.pan = null; this.gesture = null; this.touchTap.reset(); this.tapView = null
+    }
+    if (event.pointerType === 'touch') {
+      if (![...this.pointers.values()].some(point => point.type === 'touch')) this.tapView = { camera: { ...this.camera }, fitted: this.fitted, rotationIntent: this.rotationIntent }
+      this.touchTap.down(event.pointerId, event.clientX, event.clientY, event.timeStamp)
     }
     this.pointers.set(event.pointerId, { ...location, type: event.pointerType })
     this.capture(event.pointerId)
@@ -143,6 +152,7 @@ export class DrawingInput {
     }
     const layer = d.layers.find(layer => layer.id === d.activeLayerId)
     if (!layer?.visible || layer.opacity === 0) { this.warning('Show the active layer before drawing.'); return }
+    if (settings.tool === 'lasso') { this.selecting = event.pointerId; this.actions.selection.start([x, y]); return }
     if (this.active) return
     const rect = this.viewport.getBoundingClientRect()
     const smoother = event.pointerType === 'pen' ? new PenSmoother(settings.smoothing, this.camera.scale * rect.width / (this.viewport.clientWidth || 1)) : null
@@ -152,6 +162,7 @@ export class DrawingInput {
   }
   private move = (event: PointerEvent) => {
     const location = this.location(event)
+    if (event.pointerType === 'touch') this.touchTap.move(event.pointerId, event.clientX, event.clientY)
     const pointer = this.pointers.get(event.pointerId)
     if (pointer) this.pointers.set(event.pointerId, { ...location, type: pointer.type })
     if (this.gesture) {
@@ -170,6 +181,11 @@ export class DrawingInput {
       this.camera.x += location.x - this.pan.x; this.camera.y += location.y - this.pan.y
       this.pan = { pointerId: event.pointerId, ...location }; this.updateCamera(); return
     }
+    if (this.selecting === event.pointerId) {
+      event.preventDefault()
+      for (const sample of realSamples(event)) { const point = this.point(sample); this.actions.selection.move([point[0], point[1]]) }
+      return
+    }
     if (this.active?.pointerId === event.pointerId) {
       event.preventDefault()
       const samples = realSamples(event)
@@ -182,7 +198,7 @@ export class DrawingInput {
       this.schedulePreview(); this.updateReading(event, samples.length)
     } else if (event.pointerType === 'pen' || event.pointerType === 'mouse') this.updateReading(event, 0)
     const size = Math.max(4, this.settings().size * this.camera.scale)
-    this.cursor.hidden = this.settings().tool === 'hand' || event.pointerType === 'touch'
+    this.cursor.hidden = ['hand', 'lasso'].includes(this.settings().tool) || event.pointerType === 'touch'
     this.cursor.style.width = `${size}px`; this.cursor.style.height = `${size}px`
     this.cursor.style.transform = `translate(${location.x - size / 2}px, ${location.y - size / 2}px)`
   }
@@ -196,18 +212,19 @@ export class DrawingInput {
     this.frame = requestAnimationFrame(() => { this.frame = 0; this.preview(this.active ?? undefined) })
   }
   private appendPoint(point: Point) {
-    if (!this.active || this.active.stroke.points.length >= MAX_STROKE_POINTS) return
+    if (!this.active) return
     // Filter state retains precision; stored samples keep the existing compact format.
     point = [Math.round(point[0] * 100) / 100, Math.round(point[1] * 100) / 100, Math.round(point[2] * 1000) / 1000, Math.round((point[3] ?? 0) * 1000) / 1000]
     const previous = this.active.stroke.points.at(-1)!
     if (Math.hypot(point[0] - previous[0], point[1] - previous[1]) > 0.05 || Math.abs(point[2] - previous[2]) > 0.01 || Math.abs((point[3] ?? 0) - (previous[3] ?? 0)) > 0.01) this.active.stroke.points.push(point)
   }
   private appendSample(event: PointerEvent) {
-    if (!this.active || this.active.stroke.points.length >= MAX_STROKE_POINTS) return
+    if (!this.active) return
     const point = this.point(event)
     this.appendPoint(this.active.smoother?.push(point, event.timeStamp) ?? point)
   }
   private up = (event: PointerEvent) => {
+    if (this.selecting === event.pointerId) { const point = this.point(event); this.selecting = null; this.actions.selection.end([point[0], point[1]]) }
     if (this.active?.pointerId === event.pointerId) {
       // Consume the final contact samples, but not a zero-pressure pointerup tail.
       for (const sample of realSamples(event)) if (sample.pressure > 0) this.appendSample(sample)
@@ -216,7 +233,13 @@ export class DrawingInput {
       const { stroke, layerId } = this.active
       this.active = null; this.preview(); this.commit(stroke, layerId)
     }
+    const undo = event.pointerType === 'touch' && this.touchTap.up(event.pointerId, event.clientX, event.clientY, event.timeStamp)
     this.endPointer(event.pointerId)
+    if (undo) {
+      if (this.tapView) { this.camera = this.tapView.camera; this.fitted = this.tapView.fitted; this.rotationIntent = this.tapView.rotationIntent; this.updateCamera() }
+      this.actions.undo()
+    }
+    if (![...this.pointers.values()].some(point => point.type === 'touch')) this.tapView = null
   }
   private endPointer(id: number) {
     this.pointers.delete(id)
@@ -229,9 +252,9 @@ export class DrawingInput {
     }
     try { if (this.viewport.hasPointerCapture(id)) this.viewport.releasePointerCapture(id) } catch { /* Already released by the browser. */ }
   }
-  private cancelPointer = (event: PointerEvent) => { if (this.active?.pointerId === event.pointerId) this.cancelStroke(); this.endPointer(event.pointerId) }
-  cancelStroke() { this.active = null; if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.preview() }
-  reset() { this.cancelStroke(); this.pointers.clear(); this.pan = null; this.gesture = null; this.fit() }
+  private cancelPointer = (event: PointerEvent) => { this.touchTap.cancel(event.pointerId); if (this.active?.pointerId === event.pointerId || this.selecting === event.pointerId) this.cancelStroke(); this.endPointer(event.pointerId) }
+  cancelStroke() { this.active = null; if (this.selecting !== null) { this.selecting = null; this.actions.selection.cancel() }; if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.preview() }
+  reset() { this.cancelStroke(); this.pointers.clear(); this.pan = null; this.gesture = null; this.touchTap.reset(); this.tapView = null; this.fit() }
   private wheel = (event: WheelEvent) => {
     event.preventDefault()
     const { x, y } = this.location(event)

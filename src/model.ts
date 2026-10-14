@@ -1,17 +1,17 @@
 export const MAX_LAYERS = 6
-export const MAX_POINTS = 60_000
-export const MAX_DOCUMENT_BYTES = 3_000_000
-export const MAX_STROKE_POINTS = 12_000
 // Full-resolution PNG composition uses two RGBA buffers. Preview layers stay small.
 export const EXPORT_MEMORY_BUDGET = 128 * 1024 * 1024
 export const EXPORT_BYTES_PER_PIXEL = 8
 export const MAX_CANVAS_PIXELS = EXPORT_MEMORY_BUDGET / EXPORT_BYTES_PER_PIXEL
-export type Tool = 'ink' | 'pencil' | 'marker' | 'blend' | 'eraser' | 'hand'
+export type Tool = 'ink' | 'pencil' | 'marker' | 'blend' | 'eraser' | 'hand' | 'lasso'
 export type Paper = 'plain' | 'cream' | 'ruled' | 'grid' | 'transparent'
 export type Point = [number, number, number, number?]
+export type PagePoint = [number, number]
+/** Replay a cut-and-move after this many strokes, at any render resolution. */
+export interface SelectionMove { strokeIndex: number; polygon: PagePoint[]; offset: PagePoint }
 export interface Stroke {
   id: string
-  tool: Exclude<Tool, 'hand'>
+  tool: Exclude<Tool, 'hand' | 'lasso'>
   color: string
   size: number
   opacity: number
@@ -27,6 +27,7 @@ export interface Layer {
   visible: boolean
   opacity: number
   strokes: Stroke[]
+  selectionMoves?: SelectionMove[]
 }
 export interface Drawing {
   version: 1
@@ -50,7 +51,6 @@ export interface DrawingSummary {
 // Older pages contain an inline preview; new pages keep it in a separate file.
 export interface SavedDrawing { drawing: Drawing; thumbnail?: string }
 export const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n))
-export const countPoints = (drawing: Drawing) => drawing.layers.reduce((sum, layer) => sum + layer.strokes.reduce((n, stroke) => n + stroke.points.length, 0), 0)
 export function validCanvasSize(width: unknown, height: unknown): boolean {
   return canvasSizeError(width, height) === null
 }
@@ -81,21 +81,26 @@ export function validateDrawing(value: unknown): Drawing {
   if (d.version !== 1 || !isId(d.id) || typeof d.title !== 'string' || d.title.length > 100 || !validCanvasSize(d.width, d.height) || !finite(d.updatedAt, 0, Number.MAX_SAFE_INTEGER)) return invalid()
   if (!['plain', 'cream', 'ruled', 'grid', 'transparent'].includes(d.paper) || !Array.isArray(d.layers) || d.layers.length < 1 || d.layers.length > MAX_LAYERS) return invalid()
   const ids = new Set<string>()
-  let total = 0
   for (const layer of d.layers) {
-    if (!layer || !isId(layer.id) || ids.has(layer.id) || typeof layer.name !== 'string' || layer.name.length > 60 || typeof layer.visible !== 'boolean' || !finite(layer.opacity, 0, 1) || !Array.isArray(layer.strokes) || layer.strokes.length > 2000) return invalid()
+    if (!layer || !isId(layer.id) || ids.has(layer.id) || typeof layer.name !== 'string' || layer.name.length > 60 || typeof layer.visible !== 'boolean' || !finite(layer.opacity, 0, 1) || !Array.isArray(layer.strokes)) return invalid()
     ids.add(layer.id)
     for (const stroke of layer.strokes) {
-      if (!stroke || !isId(stroke.id) || !['ink', 'pencil', 'marker', 'blend', 'eraser'].includes(stroke.tool) || !/^#[a-f0-9]{6}$/i.test(stroke.color) || !finite(stroke.size, 1, 120) || !finite(stroke.opacity, 0.01, 1) || !finite(stroke.smoothing, 0, 1) || typeof stroke.pressure !== 'boolean' || (stroke.penSmoothing !== undefined && stroke.penSmoothing !== 1) || !Array.isArray(stroke.points) || !stroke.points.length || stroke.points.length > MAX_STROKE_POINTS) return invalid()
-      total += stroke.points.length
-      if (total > MAX_POINTS) return invalid()
+      if (!stroke || !isId(stroke.id) || !['ink', 'pencil', 'marker', 'blend', 'eraser'].includes(stroke.tool) || !/^#[a-f0-9]{6}$/i.test(stroke.color) || !finite(stroke.size, 1, 120) || !finite(stroke.opacity, 0.01, 1) || !finite(stroke.smoothing, 0, 1) || typeof stroke.pressure !== 'boolean' || (stroke.penSmoothing !== undefined && stroke.penSmoothing !== 1) || !Array.isArray(stroke.points) || !stroke.points.length) return invalid()
       for (const point of stroke.points) {
         if (!Array.isArray(point) || point.length < 3 || point.length > 4 || !finite(point[0], -4096, Math.max(6144, d.width + 4096)) || !finite(point[1], -4096, Math.max(6144, d.height + 4096)) || !finite(point[2], 0, 1) || (point.length === 4 && !finite(point[3], 0, 1))) return invalid()
       }
     }
+    if (layer.selectionMoves !== undefined) {
+      if (!Array.isArray(layer.selectionMoves)) return invalid()
+      let previousIndex = 0
+      const pagePoint = (point: unknown): point is PagePoint => Array.isArray(point) && point.length === 2 && point.every(n => finite(n, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER))
+      for (const move of layer.selectionMoves) {
+        if (!move || !Number.isInteger(move.strokeIndex) || move.strokeIndex < previousIndex || move.strokeIndex > layer.strokes.length || !Array.isArray(move.polygon) || move.polygon.length < 3 || !move.polygon.every(pagePoint) || !pagePoint(move.offset)) return invalid()
+        previousIndex = move.strokeIndex
+      }
+    }
   }
   if (!ids.has(d.activeLayerId)) return invalid()
-  if (new TextEncoder().encode(JSON.stringify(d)).byteLength > MAX_DOCUMENT_BYTES) return invalid()
   return d
 }
 /** History stores immutable document references; strokes are never edited in place. */

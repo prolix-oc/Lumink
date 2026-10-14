@@ -25,18 +25,28 @@ export class ColorPicker {
   private abort = new AbortController()
   private activePointer: number | null = null
   private pad: HTMLElement
+  private wheel: HTMLElement
+  private brightness: HTMLInputElement
   private hue: HTMLInputElement
   private hex: HTMLInputElement
   private palette = emptyPalette()
   private editingPalette = false
-  constructor(private root: HTMLElement, private trigger: HTMLButtonElement, private change: (hex: string) => void, private paletteActions: { save(color: string): void; remove(color: string): void }) {
-    root.innerHTML = `<div class="dp-color-heading"><strong>Color</strong><button type="button" data-color-close aria-label="Close color picker">${icon('close')}</button></div><div class="dp-color-pad" tabindex="0" role="slider" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100" aria-describedby="dp-color-help"><span class="dp-color-point"></span></div><label class="dp-hue-label">Hue<input type="range" min="0" max="360" value="0" step="1" aria-label="Color hue" class="dp-hue"></label><label class="dp-hex-label"><span class="dp-color-preview"></span>Hex<input type="text" value="#23202b" maxlength="7" spellcheck="false" autocapitalize="off" aria-label="Hex color" class="dp-hex"></label><p class="dp-color-error" role="status" hidden>Use a 3- or 6-digit hex color, such as #7565bb.</p><small id="dp-color-help">Drag to choose a color. Arrow keys adjust saturation and brightness.</small>`
+  constructor(private root: HTMLElement, private triggers: HTMLButtonElement[], private change: (hex: string) => void, private paletteActions: { save(color: string): void; remove(color: string): void }) {
+    root.innerHTML = `<div class="dp-color-heading dp-panel-heading" tabindex="0" aria-label="Move color panel" title="Drag to move. Arrow keys reposition the panel."><strong>Colors</strong><button type="button" data-color-close aria-label="Close color picker">${icon('close')}</button></div><div class="dp-color-modes" role="group" aria-label="Color picker mode"><button type="button" data-color-mode="disc" aria-pressed="true">Disc</button><button type="button" data-color-mode="classic" aria-pressed="false">Classic</button></div><div class="dp-disc-controls"><div class="dp-color-wheel" tabindex="0" role="slider" aria-label="Color wheel" aria-valuemin="0" aria-valuemax="360" aria-describedby="dp-color-help"><span class="dp-wheel-spectrum"></span><span class="dp-wheel-point"></span></div><label class="dp-hue-label">Brightness<input type="range" min="0" max="100" value="100" aria-label="Color brightness" class="dp-brightness"></label></div><div class="dp-classic-controls" hidden><div class="dp-color-pad" tabindex="0" role="slider" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100" aria-describedby="dp-color-help"><span class="dp-color-point"></span></div><label class="dp-hue-label">Hue<input type="range" min="0" max="360" value="0" step="1" aria-label="Color hue" class="dp-hue"></label></div><label class="dp-hex-label"><span class="dp-color-preview"></span>Hex<input type="text" value="#23202b" maxlength="7" spellcheck="false" autocapitalize="off" aria-label="Hex color" class="dp-hex"></label><p class="dp-color-error" role="status" hidden>Use a 3- or 6-digit hex color, such as #7565bb.</p><small id="dp-color-help">Drag to choose a color. Use arrow keys for fine adjustments.</small>`
     root.insertAdjacentHTML('beforeend', `<section class="dp-color-bank"><div class="dp-palette-heading"><strong>Recent colors</strong><small>Last 18 used</small></div><div class="dp-palette-grid" data-palette="recent" role="group" aria-label="Recent colors"></div><small data-palette-empty="recent">Draw to build your color history.</small></section><section class="dp-color-bank"><div class="dp-palette-heading"><strong>Saved palette</strong><button type="button" data-action="manage-colors" aria-label="Manage saved colors" aria-pressed="false">Edit</button></div><div class="dp-palette-grid" data-palette="saved" role="group" aria-label="Saved colors"></div><small data-palette-empty="saved">Save a color to keep it here.</small><button type="button" data-action="save-color" aria-label="Save current color">+ Save color</button></section><small class="dp-palette-error" role="status" hidden></small>`)
     this.pad = root.querySelector('.dp-color-pad')!
+    this.wheel = root.querySelector('.dp-color-wheel')!
+    this.brightness = root.querySelector('.dp-brightness')!
     this.hue = root.querySelector('.dp-hue')!
     this.hex = root.querySelector('.dp-hex')!
     const signal = this.abort.signal
     root.querySelector('[data-color-close]')!.addEventListener('click', () => this.close(), { signal })
+    for (const mode of root.querySelectorAll<HTMLButtonElement>('[data-color-mode]')) mode.addEventListener('click', () => {
+      const disc = mode.dataset.colorMode === 'disc'
+      root.querySelector<HTMLElement>('.dp-disc-controls')!.hidden = !disc
+      root.querySelector<HTMLElement>('.dp-classic-controls')!.hidden = disc
+      for (const button of root.querySelectorAll<HTMLElement>('[data-color-mode]')) button.setAttribute('aria-pressed', String(button === mode))
+    }, { signal })
     root.querySelector('[data-action="save-color"]')!.addEventListener('click', () => this.paletteActions.save(hsvToHex(this.hsv)), { signal })
     root.querySelector('[data-action="manage-colors"]')!.addEventListener('click', () => { this.editingPalette = !this.editingPalette; this.renderPalettes() }, { signal })
     root.addEventListener('click', event => {
@@ -44,6 +54,7 @@ export class ColorPicker {
       if (remove) this.paletteActions.remove(remove.dataset.removeColor!)
     }, { signal })
     this.hue.addEventListener('input', () => { this.hsv[0] = Number(this.hue.value); this.emit() }, { signal })
+    this.brightness.addEventListener('input', () => { this.hsv[2] = Number(this.brightness.value) / 100; this.emit() }, { signal })
     const editHex = () => {
       const hex = normalizeHex(this.hex.value)
       this.hex.setAttribute('aria-invalid', String(!hex))
@@ -59,7 +70,7 @@ export class ColorPicker {
       this.emit()
     }
     this.pad.addEventListener('pointerdown', event => {
-      if (event.pointerType === 'mouse' && event.button !== 0) return
+      if (this.activePointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return
       event.preventDefault(); this.pad.focus({ preventScroll: true }); this.activePointer = event.pointerId
       try { this.pad.setPointerCapture(event.pointerId) } catch { /* Synthetic input has no native capture. */ }
       point(event)
@@ -74,7 +85,26 @@ export class ColorPicker {
       else this.hsv[2] = clamp(this.hsv[2] + (event.key === 'ArrowUp' ? step : -step), 0, 1)
       this.emit()
     }, { signal })
-    document.addEventListener('pointerdown', event => { if (this.isOpen && !root.contains(event.target as Node) && !trigger.contains(event.target as Node)) this.close() }, { signal })
+    const wheelPoint = (event: PointerEvent) => {
+      const bounds = this.wheel.getBoundingClientRect(), x = (event.clientX - bounds.left) / bounds.width * 2 - 1, y = (event.clientY - bounds.top) / bounds.height * 2 - 1
+      if (Math.hypot(x, y) > 0.001) this.hsv[0] = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+      this.hsv[1] = clamp(Math.hypot(x, y), 0, 1); this.emit()
+    }
+    this.wheel.addEventListener('pointerdown', event => {
+      if (this.activePointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return
+      event.preventDefault(); this.wheel.focus({ preventScroll: true }); this.activePointer = event.pointerId
+      try { this.wheel.setPointerCapture(event.pointerId) } catch { /* Synthetic input. */ }
+      wheelPoint(event)
+    }, { signal })
+    this.wheel.addEventListener('pointermove', event => { if (event.pointerId === this.activePointer) wheelPoint(event) }, { signal })
+    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) this.wheel.addEventListener(event, release as EventListener, { signal })
+    this.wheel.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      event.preventDefault(); const step = event.shiftKey ? 10 : 1
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') this.hsv[0] = (this.hsv[0] + (event.key === 'ArrowRight' ? step : -step) + 360) % 360
+      else this.hsv[1] = clamp(this.hsv[1] + (event.key === 'ArrowUp' ? step : -step) / 100, 0, 1)
+      this.emit()
+    }, { signal })
   }
   get isOpen() { return !this.root.hidden }
   setColor(hex: string) { this.hsv = hexToHsv(hex); this.sync() }
@@ -119,8 +149,8 @@ export class ColorPicker {
     save.disabled = this.palette.saved.includes(hex) || this.palette.saved.length >= SAVED_COLOR_LIMIT
     save.textContent = this.palette.saved.includes(hex) ? '✓ Color saved' : '+ Save color'
   }
-  toggle() { if (this.isOpen) this.close(); else { this.root.hidden = false; this.trigger.setAttribute('aria-expanded', 'true'); this.pad.focus({ preventScroll: true }) } }
-  close() { this.activePointer = null; this.root.hidden = true; this.trigger.setAttribute('aria-expanded', 'false'); if (this.root.contains(document.activeElement)) this.trigger.focus({ preventScroll: true }) }
+  toggle(trigger = this.triggers[0]!) { if (this.isOpen) this.close(); else { this.root.hidden = false; for (const button of this.triggers) button.setAttribute('aria-expanded', 'true'); trigger.focus({ preventScroll: true }) } }
+  close() { this.activePointer = null; this.root.hidden = true; for (const button of this.triggers) button.setAttribute('aria-expanded', 'false'); if (this.root.contains(document.activeElement)) this.triggers.find(button => button.offsetParent !== null)?.focus({ preventScroll: true }) }
   private emit() { this.sync(); this.change(hsvToHex(this.hsv)) }
   private sync() {
     const hex = hsvToHex(this.hsv), [h, s, v] = this.hsv
@@ -129,10 +159,15 @@ export class ColorPicker {
     point.style.left = `${s * 100}%`; point.style.top = `${(1 - v) * 100}%`
     this.pad.setAttribute('aria-valuenow', String(Math.round(s * 100))); this.pad.setAttribute('aria-valuetext', `${Math.round(s * 100)}% saturation, ${Math.round(v * 100)}% brightness`)
     this.hue.value = String(h)
+    this.brightness.value = String(Math.round(v * 100))
+    const angle = h * Math.PI / 180, wheelPoint = this.root.querySelector<HTMLElement>('.dp-wheel-point')!
+    wheelPoint.style.left = `${(1 + Math.cos(angle) * s) * 50}%`; wheelPoint.style.top = `${(1 + Math.sin(angle) * s) * 50}%`
+    this.root.querySelector<HTMLElement>('.dp-wheel-spectrum')!.style.filter = `brightness(${v})`
+    this.wheel.setAttribute('aria-valuenow', String(Math.round(h))); this.wheel.setAttribute('aria-valuetext', `${Math.round(h)}° hue, ${Math.round(s * 100)}% saturation, ${Math.round(v * 100)}% brightness`)
     if (document.activeElement !== this.hex) this.hex.value = hex
     this.hex.setAttribute('aria-invalid', 'false'); this.root.querySelector<HTMLElement>('.dp-color-error')!.hidden = true
     this.root.querySelector<HTMLElement>('.dp-color-preview')!.style.background = hex
-    this.trigger.querySelector<HTMLElement>('.dp-current-color')!.style.background = hex
+    for (const trigger of this.triggers) trigger.querySelector<HTMLElement>('.dp-current-color')!.style.background = hex
     this.syncPaletteSelection()
   }
   destroy() { this.abort.abort(); this.root.replaceChildren() }

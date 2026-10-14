@@ -1,7 +1,35 @@
 import { expect, test } from 'bun:test'
 import { angleDelta, cameraAtPoint, pageToScreen, screenToPage, softSnapRotation, zoomAround } from '../src/input'
+import { TwoFingerTap } from '../src/touch-undo'
 
 const radians = (degrees: number) => degrees * Math.PI / 180
+test('two-finger undo fires once after both short contacts lift, in either order', () => {
+  for (const first of [1, 2]) {
+    const tap = new TwoFingerTap()
+    tap.down(1, 20, 30, 0); tap.down(2, 70, 80, 50)
+    tap.move(1, 22, 32)
+    expect(tap.up(first, first === 1 ? 22 : 70, first === 1 ? 32 : 80, 100)).toBe(false)
+    const second = first === 1 ? 2 : 1
+    expect(tap.up(second, second === 1 ? 22 : 70, second === 1 ? 32 : 80, 150)).toBe(true)
+    expect(tap.up(second, 20, 30, 160)).toBe(false)
+    tap.down(3, 0, 0, 200); tap.down(4, 50, 0, 220)
+    expect(tap.up(3, 0, 0, 240)).toBe(false); expect(tap.up(4, 50, 0, 260)).toBe(true)
+  }
+})
+test('navigation, holds, extra fingers, canceled contacts, and single touches never undo', () => {
+  for (const scenario of ['pan', 'pinch', 'hold', 'late', 'third', 'replacement', 'cancel', 'single']) {
+    const tap = new TwoFingerTap()
+    tap.down(1, 0, 0, 0)
+    if (scenario !== 'single') tap.down(2, 50, 0, scenario === 'late' ? 180 : 50)
+    if (scenario === 'pan') tap.move(1, 10, 0)
+    if (scenario === 'pinch') tap.move(2, 60, 0)
+    if (scenario === 'third') { tap.down(3, 80, 0, 70); tap.up(3, 80, 0, 90) }
+    if (scenario === 'replacement') { tap.up(1, 0, 0, 80); tap.down(3, 80, 0, 90); tap.up(3, 80, 0, 100) }
+    if (scenario === 'cancel') tap.cancel(1)
+    expect(tap.up(1, 0, 0, 100)).toBe(false)
+    expect(tap.up(2, 50, 0, scenario === 'hold' ? 400 : 200)).toBe(false)
+  }
+})
 test('rotated drawing coordinates match the CSS transform and invert in every quadrant', () => {
   const quarter = { x: 100, y: 200, scale: 2, rotation: Math.PI / 2 }
   const known = pageToScreen(30, 40, quarter)

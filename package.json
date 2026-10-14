@@ -9,6 +9,7 @@
     "test": "bun test tests",
     "demo": "bun run scripts/demo-server.ts",
     "test:browser": "bun run scripts/browser-test.ts",
+    "test:workspace": "bun tests/workspace.browser.ts",
     "test:brushes": "bun run scripts/browser-test.ts --brushes"
   },
   "dependencies": {

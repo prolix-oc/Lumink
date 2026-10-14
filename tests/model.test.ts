@@ -36,6 +36,29 @@ describe('drawing documents', () => {
     expect(() => validateDrawing(d)).toThrow()
     expect(() => validateDrawing({ ...createDrawing(), activeLayerId: '../../config' })).toThrow()
   })
+  test('documents round-trip beyond the former page, stroke, stroke-count, and file-size caps', () => {
+    const drawing = createDrawing()
+    drawing.layers[0]!.strokes = [
+      { ...stroke(), points: Array.from({ length: 125_000 }, () => [100.25, 200.75, 0.555, 0.123]) },
+      ...Array.from({ length: 2001 }, () => stroke()),
+    ]
+    const json = JSON.stringify(drawing)
+    expect(new TextEncoder().encode(json).byteLength).toBeGreaterThan(3_000_000)
+    const restored = validateDrawing(JSON.parse(json))
+    expect(restored.layers[0]!.strokes).toHaveLength(2002)
+    expect(restored.layers[0]!.strokes[0]!.points).toHaveLength(125_000)
+  })
+  test('selection moves survive editable files and reject malformed or out-of-order operations', () => {
+    const drawing = createDrawing(), layer = drawing.layers[0]!
+    layer.strokes = [stroke(), stroke()]
+    const move = { strokeIndex: 1, polygon: [[90, 90], [210, 90], [210, 110], [90, 110]] as [number, number][], offset: [35, -50] as [number, number] }
+    layer.selectionMoves = [move, { ...move, strokeIndex: 2 }]
+    expect(validateDrawing(JSON.parse(JSON.stringify(drawing))).layers[0]!.selectionMoves).toEqual(layer.selectionMoves)
+    for (const invalid of [{ ...move, strokeIndex: -1 }, { ...move, strokeIndex: 3 }, { ...move, strokeIndex: 0.5 }, { ...move, offset: [NaN, 5] }, { ...move, polygon: [[0, 0], [10, 10]] }]) {
+      expect(() => validateDrawing({ ...drawing, layers: [{ ...layer, selectionMoves: [invalid] }] })).toThrow()
+    }
+    expect(() => validateDrawing({ ...drawing, layers: [{ ...layer, selectionMoves: [{ ...move, strokeIndex: 2 }, move] }] })).toThrow()
+  })
   test('undo/redo preserve strokes and branching discards redo', () => {
     const d = createDrawing(), history = new DrawingHistory(d), mark = stroke()
     history.commit({ ...d, layers: [{ ...d.layers[0]!, strokes: [mark] }] })

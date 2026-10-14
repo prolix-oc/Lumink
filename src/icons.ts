@@ -5,6 +5,7 @@ const paths: Record<string, string> = {
   blend: '<path d="m15 3 6 6-9 9-6-6Z"/><path d="M6 12c-4 1-5 4-4 7 3 1 6 0 7-4M13 21c2 0 3-1 3-3s2-3 5-3"/>',
   eraser: '<path d="m16 3 6 6-13 13H5l-4-4Z"/><path d="m7 12 7 7M9 22h13"/>',
   hand: '<path d="M8 13V5a2 2 0 0 1 4 0v7-9a2 2 0 0 1 4 0v9-6a2 2 0 0 1 4 0v9c0 4-3 7-7 7h-1c-3 0-5-2-7-5l-3-4a2 2 0 0 1 3-3Z"/>',
+  lasso: '<path d="M8 18c-4-1-6-3-6-6 0-5 6-9 12-8 5 0 8 3 8 6 0 4-5 8-10 8" stroke-dasharray="3 3"/><ellipse cx="10" cy="18" rx="3" ry="2"/><path d="M9 20c-1 3-5 3-5 1"/>',
   undo: '<path d="M3 9h10a7 7 0 0 1 0 14M3 9l5-5M3 9l5 5"/>',
   redo: '<path d="M21 9H11a7 7 0 0 0 0 14M21 9l-5-5M21 9l-5 5"/>',
   plus: '<path d="M12 4v16M4 12h16"/>',

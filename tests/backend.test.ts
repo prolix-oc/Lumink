@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { SpindleAPI } from 'lumiverse-spindle-types'
 import { createBackendHandler, type Reply } from '../src/backend-handler'
-import { createDrawing } from '../src/model'
+import { createDrawing, type SavedDrawing } from '../src/model'
 import type { CatalogPage, DrawingIndex, ThumbnailPreview } from '../src/catalog'
 function fixture() {
   const files = new Map<string, unknown>(), replies: { user?: string; session?: string; reply: Reply }[] = [], reads: string[] = []
@@ -23,6 +23,15 @@ function fixture() {
   return { files, reads, replies, grants, handler, call, get uploads() { return uploads }, get deletes() { return deletes } }
 }
 describe('scoped sketchbook backend', () => {
+  test('large pages still save and reopen after exceeding the former document limits', async () => {
+    const f = fixture(), drawing = createDrawing()
+    drawing.layers[0]!.strokes = [{ id: crypto.randomUUID(), tool: 'ink', color: '#23202b', size: 8, opacity: 1, smoothing: 0, pressure: true, points: Array.from({ length: 125_000 }, () => [100.25, 200.75, 0.555, 0.123]) }]
+    drawing.layers[0]!.selectionMoves = [{ strokeIndex: 1, polygon: [[90, 190], [110, 190], [110, 210], [90, 210]], offset: [20, 30] }]
+    expect((await f.call('save', { drawing, thumbnail: 'data:image/png;base64,large' })).ok).toBe(true)
+    const saved = (await f.call('load', { id: drawing.id })).result as SavedDrawing
+    expect(saved.drawing.layers[0]!.strokes[0]!.points).toHaveLength(125_000)
+    expect(saved.drawing.layers[0]!.selectionMoves).toEqual(drawing.layers[0]!.selectionMoves)
+  })
   test('account color palettes are isolated and concurrent mutations merge', async () => {
     const f = fixture()
     await Promise.all([

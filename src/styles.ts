@@ -2,10 +2,10 @@ export const styles = `
 .dp-launcher,.dp-app,.dp-new { --dp-ink:var(--lumiverse-text,#edeaf4); --dp-muted:var(--lumiverse-text-muted,#a9a4b5); --dp-fill:var(--lumiverse-bg,#211d2b); --dp-surface:var(--lumiverse-fill-subtle,#2b2637); --dp-border:var(--lumiverse-border,rgba(180,170,210,.19)); --dp-accent:var(--lumiverse-primary,#a699e9); color:var(--dp-ink); font:13px/1.45 system-ui,-apple-system,BlinkMacSystemFont,sans-serif; box-sizing:border-box }
 .dp-launcher *,.dp-app *,.dp-new * { box-sizing:border-box }
 .dp-app [hidden],.dp-launcher [hidden],.dp-new [hidden] { display:none!important }
-.dp-app :where(button[data-action],button[data-tool],button[data-color],button[data-layer],button[data-toggle-layer],button[data-color-close],.dp-open-card,.dp-delete-card),.dp-launcher button,.dp-new button[data-new] { font:inherit; cursor:pointer; color:inherit; touch-action:manipulation; border:1px solid var(--dp-border); border-radius:9px; background:var(--dp-surface); display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:38px; padding:8px 11px; transition:background .15s,border-color .15s }
+.dp-app :where(button[data-action],button[data-tool],button[data-color],button[data-layer],button[data-toggle-layer],button[data-color-close],button[data-color-mode],.dp-open-card,.dp-delete-card),.dp-launcher button,.dp-new button[data-new] { font:inherit; cursor:pointer; color:inherit; touch-action:manipulation; border:1px solid var(--dp-border); border-radius:9px; background:var(--dp-surface); display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:38px; padding:8px 11px; transition:background .15s,border-color .15s }
 .dp-app :where(button[data-action],button[data-tool],button[data-color],button[data-layer],button[data-toggle-layer],button[data-color-close],.dp-open-card,.dp-delete-card):hover,.dp-launcher button:hover,.dp-new button[data-new]:hover { border-color:var(--dp-accent); background:color-mix(in srgb,var(--dp-accent) 12%,var(--dp-surface)) }
 .dp-app button[data-action]:disabled,.dp-new button[data-new]:disabled { opacity:.4; cursor:default }
-.dp-app :where(button[data-action],button[data-tool],button[data-color],button[data-layer],button[data-toggle-layer],button[data-color-close],.dp-open-card,.dp-delete-card,[data-setting],.dp-color-picker input,.dp-color-pad):focus-visible,.dp-launcher button:focus-visible,.dp-new button[data-new]:focus-visible { outline:2px solid var(--dp-accent); outline-offset:2px }
+.dp-app :where(button[data-action],button[data-tool],button[data-color],button[data-layer],button[data-toggle-layer],button[data-color-close],button[data-color-mode],.dp-open-card,.dp-delete-card,[data-setting],.dp-color-picker input,.dp-color-pad,.dp-color-wheel,.dp-panel-heading):focus-visible,.dp-launcher button:focus-visible,.dp-new button[data-new]:focus-visible { outline:2px solid var(--dp-accent); outline-offset:2px }
 .dp-app .dp-primary,.dp-launcher .dp-primary,.dp-new button[data-new].dp-primary { background:var(--dp-accent); color:#171221; border-color:transparent; font-weight:650 }
 .dp-app .dp-icon-button { width:36px; padding:6px; min-height:34px }
 .dp-launcher { padding:18px; display:flex; flex-direction:column; gap:16px }
@@ -67,12 +67,17 @@ export const styles = `
 .dp-zoom-value { font-variant-numeric:tabular-nums;min-width:39px;text-align:center;font-size:10px }
 .dp-zoom .dp-rotation-value { width:auto;min-width:34px;padding:5px;font-size:10px;font-variant-numeric:tabular-nums }
 .dp-zoom-divider { height:17px;border-left:1px solid #514959;margin:0 3px }
-.dp-canvas-fullscreen > .dp-topbar,.dp-canvas-fullscreen > .dp-properties,.dp-canvas-fullscreen > .dp-preferences,.dp-canvas-fullscreen > .dp-share-row,.dp-canvas-fullscreen > .dp-notice,.dp-canvas-fullscreen .dp-layers { display:none }
+.dp-canvas-fullscreen > .dp-topbar,.dp-canvas-fullscreen > .dp-properties,.dp-canvas-fullscreen > .dp-preferences,.dp-canvas-fullscreen > .dp-share-row,.dp-canvas-fullscreen > .dp-notice { display:none }
 .dp-canvas-fullscreen .dp-tools { position:absolute;left:12px;top:12px;bottom:auto;max-height:calc(100% - 24px);border:1px solid var(--dp-border);border-radius:12px;box-shadow:0 4px 20px #0005 }
-.dp-canvas-fullscreen > .dp-notice[data-error=true] { display:block;position:absolute;left:80px;right:12px;bottom:65px;z-index:8;border:1px solid var(--dp-border);border-radius:9px }
-.dp-layers { width:165px;flex:none;border-left:1px solid var(--dp-border);padding:12px 9px;overflow:auto;background:var(--dp-fill);z-index:5 }
-.dp-layer-heading { display:flex;align-items:center;justify-content:space-between;margin-bottom:9px }
-.dp-layer-heading strong { font-size:11px;text-transform:uppercase;letter-spacing:1px }
+.dp-canvas-toast { position:absolute;left:80px;right:12px;bottom:108px;z-index:8;padding:10px 14px;border:1px solid var(--dp-border);border-radius:10px;background:var(--dp-fill);color:var(--dp-muted);width:fit-content;max-width:calc(100% - 92px);box-shadow:0 4px 20px #0005;pointer-events:none }
+.dp-canvas-toast[data-error=true] { color:#ffc0ae }
+.dp-floating-panel { position:absolute;top:76px;max-width:calc(100% - 16px);overflow:auto;overscroll-behavior:contain;border:1px solid var(--dp-border);border-radius:16px;background:var(--dp-fill);box-shadow:0 10px 40px #0007;z-index:9;scrollbar-width:thin }
+.dp-panel-heading { display:flex;align-items:center;gap:5px;position:sticky;top:0;background:var(--dp-fill);z-index:2;padding:18px 12px 10px;margin:0;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none }
+.dp-panel-heading:active { cursor:grabbing }
+.dp-panel-heading::before { content:'';position:absolute;top:7px;left:calc(50% - 16px);width:32px;height:3px;border-radius:3px;background:var(--dp-muted);opacity:.45 }
+.dp-panel-heading strong { flex:1;font-size:14px;font-weight:650;letter-spacing:-.2px }
+.dp-layers { width:244px;right:12px;padding:0 12px 12px }
+.dp-layer-heading { margin:0 -12px 8px }
 .dp-layer-list { display:flex;flex-direction:column;gap:6px }
 .dp-layer { display:flex;gap:3px;align-items:center;border:1px solid var(--dp-border);border-radius:8px;padding:3px }
 .dp-layer[data-active=true] { border-color:var(--dp-accent);background:color-mix(in srgb,var(--dp-accent) 10%,transparent) }
@@ -91,10 +96,28 @@ export const styles = `
 .dp-colors .dp-swatch[aria-pressed=true] { outline:2px solid var(--dp-accent);outline-offset:2px }
 .dp-colors .dp-color-trigger { min-height:32px;padding:5px 8px;margin-right:5px;font-size:11px }
 .dp-current-color,.dp-color-preview { display:block;width:18px;height:18px;border-radius:50%;border:1px solid #ffffff60;flex-shrink:0 }
-.dp-color-picker { position:absolute;bottom:calc(100% + 8px);left:12px;width:300px;max-width:calc(100% - 24px);max-height:min(680px,calc(var(--app-scaled-viewport-height,100dvh) - 210px));overflow:auto;padding:14px;border:1px solid var(--dp-border);border-radius:13px;background:var(--dp-fill);box-shadow:0 8px 35px #0008;z-index:9;display:grid;gap:12px;overscroll-behavior:contain }
-.dp-color-heading { display:flex;align-items:center;justify-content:space-between }
+.dp-color-picker { left:64px;width:300px;padding:0 14px 14px;display:grid;gap:12px }
+.dp-color-picker[data-floating=true],.dp-canvas-fullscreen .dp-color-picker { width:248px;gap:10px }
+.dp-color-heading { margin:0 -14px }
 .dp-color-heading button { min-height:28px;width:28px;padding:5px;border:0;background:transparent }
 .dp-color-heading svg { width:16px;height:16px }
+.dp-color-modes { display:flex;gap:4px;background:var(--dp-surface);padding:3px;border-radius:9px }
+.dp-color-modes button { flex:1;min-height:28px;font-size:11px;padding:4px 8px;border:0;background:transparent }
+.dp-color-modes button[aria-pressed=true] { color:var(--dp-accent);background:var(--dp-fill);box-shadow:0 1px 4px #0003 }
+.dp-disc-controls,.dp-classic-controls { display:grid;gap:12px }
+.dp-color-wheel { position:relative;width:calc(100% - 18px);aspect-ratio:1;justify-self:center;border-radius:50%;touch-action:none;cursor:crosshair;background:#000 }
+.dp-wheel-spectrum { position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,#fff,transparent 70.71%),conic-gradient(from 90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);pointer-events:none }
+.dp-wheel-point { position:absolute;width:16px;height:16px;border:2px solid #fff;box-shadow:0 0 0 1px #0008;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none }
+.dp-brightness { width:100%;margin:0;accent-color:var(--dp-accent) }
+.dp-selection { position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none }
+.dp-selection path { fill:none;vector-effect:non-scaling-stroke;stroke-width:1.5 }
+.dp-selection-base { stroke:#fff }
+.dp-selection-ants { stroke:#222;stroke-dasharray:5 5;animation:dp-marching 1s linear infinite }
+@keyframes dp-marching { to { stroke-dashoffset:-10 } }
+.dp-selection-toolbar { position:absolute;bottom:58px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:6px;align-items:center;padding:5px 8px;border-radius:11px;border:1px solid var(--dp-border);background:var(--dp-fill);box-shadow:0 4px 20px #0005;white-space:nowrap }
+.dp-selection-toolbar span { color:var(--dp-muted);font-size:10px;margin-right:4px }
+.dp-selection-toolbar button { min-height:30px;padding:4px 9px;font-size:11px }
+.dp-selection-toolbar [data-action=selection-done] { color:var(--dp-accent) }
 .dp-color-pad { position:relative;aspect-ratio:1.5;border-radius:6px;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent),var(--dp-hue-color,#ff0000);touch-action:none;cursor:crosshair;flex-shrink:0 }
 .dp-color-point { position:absolute;width:13px;height:13px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #0008;transform:translate(-50%,-50%);pointer-events:none }
 .dp-hue-label { display:grid;gap:6px;font-size:11px;color:var(--dp-muted) }
@@ -161,9 +184,9 @@ export const styles = `
 .dp-new-actions { display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:-16px;background:var(--dp-fill);padding:12px 0 8px;margin-top:-8px;border-top:1px solid var(--dp-border);z-index:1 }
 .dp-new label { display:grid;gap:8px }
 @container dp-new (max-width:440px) { .dp-presets { grid-template-columns:repeat(2,minmax(0,1fr)) }.dp-paper-preview { width:58px;height:58px;margin:0 0 9px }.dp-new button[data-new=preset] { padding:10px 7px } }
-@container dp-workspace (max-width:900px) { .dp-layers { position:absolute;right:0;top:0;bottom:0;width:170px;box-shadow:-8px 0 25px #0005 } .dp-topbar { gap:7px } .dp-preferences { gap:12px } }
+@container dp-workspace (max-width:900px) { .dp-topbar { gap:7px } .dp-preferences { gap:12px } }
 @container dp-workspace (max-width:560px) { .dp-topbar { padding:8px 86px 8px 8px;gap:6px } .dp-topbar button { padding:6px 8px;font-size:11px;min-height:33px } .dp-app .dp-close { right:calc(8px + env(safe-area-inset-right,0px));top:calc(8px + var(--app-interactive-safe-top,env(safe-area-inset-top,0px)));padding:6px 8px;min-height:34px;font-size:11px } .dp-workspace-controls { right:calc(84px + env(safe-area-inset-right,0px));top:calc(8px + var(--app-interactive-safe-top,env(safe-area-inset-top,0px))) } .dp-workspace-controls button { min-height:34px;font-size:11px } .dp-save-state { margin-right:0;flex:1 } .dp-tools { width:45px;padding:9px 4px;gap:5px } .dp-tools button { width:35px;min-height:35px } .dp-properties { padding:8px;gap:8px } .dp-colors { width:100%;justify-content:center;gap:8px } .dp-slider { min-width:95px;max-width:none;gap:5px } .dp-preferences { padding:7px 8px;gap:8px;font-size:10px } .dp-pencil-details { margin-left:0 } .dp-share-row { padding:8px;gap:6px } .dp-share-row button { font-size:11px;padding:7px 8px;white-space:nowrap } .dp-notice { padding:6px 8px;font-size:10px } .dp-library { padding:12px } .dp-library-heading { padding-right:72px;gap:8px } .dp-library-heading h2 { font-size:16px } }
-@media(prefers-reduced-motion:reduce) { .dp-app button,.dp-launcher button { transition:none } }
+@media(prefers-reduced-motion:reduce) { .dp-app button,.dp-launcher button { transition:none }.dp-selection-ants { animation:none } }
 @container dp-workspace (max-width:560px) {
   .dp-topbar .dp-title-slot { flex:1 1 calc(100% - 85px); max-width:none; min-width:0 }
   .dp-topbar .dp-save-state { flex:0 0 72px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:9px }
