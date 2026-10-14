@@ -5,19 +5,17 @@ import { dirname, join, resolve } from 'node:path'
 // Illarin's named-attachment setting requires this exact name on every release.
 export const RELEASE_ASSET = 'lumink.zip'
 export interface ReleaseManifest { version: string; identifier: string; entry_backend: string; entry_frontend: string }
-export function releaseMetadata(manifest: ReleaseManifest, packageVersion: string, tag = `v${manifest.version}`) {
+export function releaseMetadata(manifest: ReleaseManifest, tag = `v${manifest.version}`) {
   const version = manifest.version
   const match = typeof version === 'string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(version)
   if (!match || match[4]?.split('.').some(part => /^\d+$/.test(part) && part.length > 1 && part.startsWith('0'))) throw new Error('spindle.json must have a valid semantic version.')
-  if (version !== packageVersion) throw new Error(`Version mismatch: spindle.json is ${version}, package.json is ${packageVersion}. Update both before releasing.`)
   if (tag !== `v${version}`) throw new Error(`Release tag must be v${version}; received ${tag}.`)
   if (manifest.identifier !== 'lumink' || manifest.entry_backend !== 'dist/backend.js' || manifest.entry_frontend !== 'dist/frontend.js') throw new Error('The release must contain Lumink and its built dist/backend.js and dist/frontend.js entrypoints.')
   return { version, tag, prerelease: !!match[4] }
 }
 async function metadata(project: string, tag?: string) {
   const manifest = JSON.parse(await readFile(join(project, 'spindle.json'), 'utf8')) as ReleaseManifest
-  const pkg = JSON.parse(await readFile(join(project, 'package.json'), 'utf8')) as { version: string }
-  return releaseMetadata(manifest, pkg.version, tag)
+  return releaseMetadata(manifest, tag)
 }
 export async function packageRelease(project: string, output = join(project, 'release')) {
   const release = await metadata(project)
@@ -42,7 +40,7 @@ export async function packageRelease(project: string, output = join(project, 're
 }
 if (import.meta.main) {
   const [mode, tag, extra] = Bun.argv.slice(2)
-  if (extra || (mode !== undefined && mode !== '--check') || (mode === '--check' && !tag)) throw new Error('Usage: bun run scripts/package-release.ts [--check vX.Y.Z]')
+  if (extra || (mode !== undefined && mode !== '--check')) throw new Error('Usage: bun run scripts/package-release.ts [--check [vX.Y.Z]]')
   if (mode === '--check') {
     const release = await metadata(process.cwd(), tag)
     if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `version=${release.version}\ntag=${release.tag}\nprerelease=${release.prerelease}\n`)

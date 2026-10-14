@@ -24,21 +24,16 @@ A Spindle extension for sketching, handwritten notes, and sharing a little drawi
 
 ## Publishing releases
 
-The **Release Lumink** GitHub Actions workflow runs when a `v*` tag is pushed. It checks that the tag matches the versions in both `spindle.json` and `package.json`, installs dependencies from `bun.lock`, runs the typecheck and unit tests, builds the extension, and publishes these release attachments:
+To release, change the `version` in **`spindle.json`**, commit, and push to **`main`**. The **Release Lumink** GitHub Actions workflow automatically creates the matching `v<version>` tag on that commit and publishes the release. `spindle.json` is the release version source; updating `package.json` or creating a tag yourself is unnecessary.
+
+The workflow validates the manifest, installs dependencies from `bun.lock`, runs the typecheck and unit tests, builds the extension, and publishes these release attachments:
 
 - **`lumink.zip`** — an installable archive with `spindle.json` at its root, both built `dist` entrypoints, the README, license, and dependency notices.
 - **`lumink.zip.sha256`** — the archive's checksum.
 
-The attachment name stays the same across versions so Illarin can import it. The workflow uploads both files to a draft before publishing it. Tags with a semantic-version prerelease suffix, such as `v0.2.0-rc.1`, produce GitHub prereleases. A rerun can finish an interrupted draft; it refuses to replace an already published release.
+The attachment name stays the same across versions so Illarin can import it. The workflow uploads both files to a draft before publishing it. Versions with a semantic-version prerelease suffix, such as `0.2.0-rc.1`, produce GitHub prereleases. Manifest edits that leave the version unchanged and versions already published are skipped. A rerun can finish an interrupted draft; a tag pointing to another commit requires a new version.
 
-To release, update both version fields, commit and push the changes (including this workflow and its build scripts), then tag that commit. For the current version:
-
-```sh
-git tag -a v0.1.2 -m "Lumink v0.1.2"
-git push origin v0.1.2
-```
-
-You can also run **Actions → Release Lumink → Run workflow** with an existing tag that contains the workflow and scripts. GitHub's built-in `GITHUB_TOKEN` supplies release access; no Illarin secret is needed.
+You can also run **Actions → Release Lumink → Run workflow** on **main** to publish its current manifest version without another bump. To retry a failed release for an older commit, rerun that commit's workflow. GitHub's built-in `GITHUB_TOKEN` supplies release access; no Illarin secret is needed. Automatic tagging uses the release's [target commit](https://cli.github.com/manual/gh_release_create), so it stays tied to the version commit even if `main` advances during the build.
 
 For the first Illarin upload, create the same archive locally with Bun 1.4.2 and `zip` installed:
 

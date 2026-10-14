@@ -2,35 +2,32 @@ name: Release Lumink
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - spindle.json
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Existing release tag, matching spindle.json and package.json (for example v0.1.2)'
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: lumink-release-${{ inputs.tag || github.ref_name }}
+  group: lumink-release
   cancel-in-progress: false
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Check out the release tag
+      - name: Check out the version commit
         uses: actions/checkout@v7
         with:
-          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Bun
@@ -40,30 +37,78 @@ jobs:
 
       - name: Validate release version
         id: metadata
-        run: bun run scripts/package-release.ts --check "$RELEASE_TAG"
+        run: bun run scripts/package-release.ts --check
+
+      - name: Decide whether to release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == 'push' && "$BEFORE_SHA" != '0000000000000000000000000000000000000000' ]]; then
+            # Fetch the old commit if a force push removed it from the branch history.
+            if ! git cat-file -e "$BEFORE_SHA^{commit}"; then
+              git fetch --no-tags origin "$BEFORE_SHA"
+            fi
+            if git cat-file -e "$BEFORE_SHA:spindle.json" 2>/dev/null; then
+              previous_version=$(git show "$BEFORE_SHA:spindle.json" | bun -e 'console.log((await Bun.stdin.json()).version)')
+              if [[ "$previous_version" == "$RELEASE_VERSION" ]]; then
+                echo 'publish=false' >> "$GITHUB_OUTPUT"
+                echo 'The spindle.json version has not changed; skipping release.'
+                exit 0
+              fi
+            fi
+          fi
+          if release_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft'); then
+            if [[ "$release_draft" != 'true' ]]; then
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              echo "Release $RELEASE_TAG is already published; skipping release."
+              exit 0
+            fi
+          fi
+          if tag_commit=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}" 2>/dev/null); then
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "Tag $RELEASE_TAG points to another commit. Use a new version in spindle.json." >&2
+              exit 1
+            fi
+          fi
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
 
       - name: Install locked dependencies
+        if: steps.release.outputs.publish == 'true'
         run: bun install --frozen-lockfile
 
       - name: Typecheck
+        if: steps.release.outputs.publish == 'true'
         run: bun run typecheck
 
       - name: Test
+        if: steps.release.outputs.publish == 'true'
         run: bun run test
 
       - name: Build and package the extension
+        if: steps.release.outputs.publish == 'true'
         run: bun run package
 
       - name: Check archive integrity
+        if: steps.release.outputs.publish == 'true'
         working-directory: release
         run: |
           unzip -t lumink.zip
           sha256sum --check lumink.zip.sha256
 
       - name: Publish GitHub release for Illarin
+        if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
           RELEASE_PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
         shell: bash
         run: |
@@ -75,16 +120,17 @@ jobs:
               exit 1
             fi
           else
-            release_flags=(--draft --verify-tag --generate-notes --title "Lumink $RELEASE_TAG")
+            release_flags=(--draft --target "$GITHUB_SHA" --generate-notes --title "Lumink $RELEASE_TAG")
             if [[ "$RELEASE_PRERELEASE" == 'true' ]]; then
               release_flags+=(--prerelease)
             fi
             gh release create "$RELEASE_TAG" "${release_flags[@]}"
           fi
           gh release upload "$RELEASE_TAG" release/lumink.zip release/lumink.zip.sha256 --clobber
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$RELEASE_PRERELEASE" --verify-tag
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$RELEASE_PRERELEASE" --target "$GITHUB_SHA"
 
       - name: Record release details
+        if: steps.release.outputs.publish == 'true'
         env:
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
         run: |
