@@ -3,8 +3,10 @@
   "version": "0.1.2",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "build": "bun run scripts/build.ts",
+    "package": "bun run build && bun run scripts/package-release.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "demo": "bun run scripts/demo-server.ts",

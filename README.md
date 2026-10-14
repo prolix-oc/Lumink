@@ -21,3 +21,30 @@ A Spindle extension for sketching, handwritten notes, and sharing a little drawi
 - Drafts save automatically **700 ms after the last edit**, including title changes. Pending strokes, layer/paper changes, and renames share the same timer. Saving waits for an active stroke to finish, and closing, switching pages, opening the sketchbook, or hiding the page flushes pending changes immediately. Save an editable `.drawingpad.json` file to continue a sketch later, or open one as a new page.
 - **Save PNG** produces the full page resolution. On iOS/iPadOS, it opens the system share sheet when file sharing is available; choose Save Image or Save to Files. Other browsers download the PNG.
 - **Share to chat** sends a user message with a native PNG attachment and an optional caption. The host can display it and include it in vision context. It does not start an assistant reply automatically.
+
+## Publishing releases
+
+The **Release Lumink** GitHub Actions workflow runs when a `v*` tag is pushed. It checks that the tag matches the versions in both `spindle.json` and `package.json`, installs dependencies from `bun.lock`, runs the typecheck and unit tests, builds the extension, and publishes these release attachments:
+
+- **`lumink.zip`** — an installable archive with `spindle.json` at its root, both built `dist` entrypoints, the README, license, and dependency notices.
+- **`lumink.zip.sha256`** — the archive's checksum.
+
+The attachment name stays the same across versions so Illarin can import it. The workflow uploads both files to a draft before publishing it. Tags with a semantic-version prerelease suffix, such as `v0.2.0-rc.1`, produce GitHub prereleases. A rerun can finish an interrupted draft; it refuses to replace an already published release.
+
+To release, update both version fields, commit and push the changes (including this workflow and its build scripts), then tag that commit. For the current version:
+
+```sh
+git tag -a v0.1.2 -m "Lumink v0.1.2"
+git push origin v0.1.2
+```
+
+You can also run **Actions → Release Lumink → Run workflow** with an existing tag that contains the workflow and scripts. GitHub's built-in `GITHUB_TOKEN` supplies release access; no Illarin secret is needed.
+
+For the first Illarin upload, create the same archive locally with Bun 1.4.2 and `zip` installed:
+
+```sh
+bun install --frozen-lockfile
+bun run package
+```
+
+Upload **`release/lumink.zip`**. In the published Illarin extension's GitHub source settings, connect the public repository, choose **Named attachment**, and enter exactly **`lumink.zip`**. Verify the repository using its `.illarin-proof` file on the default branch. Illarin imports eligible releases published after verification, usually on its hourly check; prereleases require opting in. See [Illarin's extension publishing guide](https://illarin.com/docs/extension-publishing).

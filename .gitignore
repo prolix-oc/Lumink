@@ -3,5 +3,9 @@ node_modules/
 test-results/
 .DS_Store
 demo/
-scripts/
-bun.lock
+scripts/*
+!scripts/build.ts
+!scripts/notices.ts
+!scripts/package-release.ts
+release/
+.tmp/
