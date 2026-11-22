@@ -1,3 +1,4 @@
+import { uuid } from './fixtures'
 import { expect, test } from 'bun:test'
 import { PenSmoother } from '../src/smoothing'
 import { BrushDabs } from '../src/blend'
@@ -94,7 +95,7 @@ test('blend spacing and pressure interpolation are independent of sample density
 })
 
 test('editable blend strokes round-trip and older stroke geometry keeps its original streamline', () => {
-  const drawing = createDrawing(), stroke: Stroke = { id: crypto.randomUUID(), tool: 'blend', color: '#abcdef', size: 48, opacity: 0.6, smoothing: 0.25, pressure: true, penSmoothing: 1, points: [[10, 20, 0.5], [100, 20, 0.8]] }
+  const drawing = createDrawing(uuid), stroke: Stroke = { id: uuid.v4(), tool: 'blend', color: '#abcdef', size: 48, opacity: 0.6, smoothing: 0.25, pressure: true, penSmoothing: 1, points: [[10, 20, 0.5], [100, 20, 0.8]] }
   drawing.layers[0]!.strokes.push(stroke)
   expect(validateDrawing(JSON.parse(JSON.stringify(drawing))).layers[0]!.strokes[0]).toEqual(stroke)
   expect(() => validateDrawing({ ...drawing, layers: [{ ...drawing.layers[0], strokes: [{ ...stroke, penSmoothing: 2 }] }] })).toThrow()

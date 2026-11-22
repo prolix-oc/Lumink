@@ -1,3 +1,4 @@
+import type { SpindleFrontendUUIDAPI } from 'lumiverse-spindle-types'
 import { clamp, type Drawing, type PagePoint, type Point, type Stroke, type Tool } from './model'
 import { PenSmoother } from './smoothing'
 import { TwoFingerTap } from './touch-undo'
@@ -64,6 +65,7 @@ export class DrawingInput {
     private cameraChange: (camera: Camera) => void,
     private warning: (message: string) => void,
     private actions: { undo(): void; selection: { start(point: PagePoint): void; move(point: PagePoint): void; end(point: PagePoint): void; cancel(): void } },
+    private uuid: Pick<SpindleFrontendUUIDAPI, 'v4'>,
   ) {
     const signal = this.abort.signal
     viewport.addEventListener('pointerdown', this.down, { signal })
@@ -157,7 +159,7 @@ export class DrawingInput {
     const rect = this.viewport.getBoundingClientRect()
     const smoother = event.pointerType === 'pen' ? new PenSmoother(settings.smoothing, this.camera.scale * rect.width / (this.viewport.clientWidth || 1)) : null
     const first = this.point(event)
-    this.active = { pointerId: event.pointerId, layerId: layer.id, predicted: [], smoother, stroke: { id: crypto.randomUUID(), tool: settings.tool, color: settings.color, size: settings.size, opacity: settings.opacity, smoothing: settings.smoothing, pressure: settings.pressure && event.pointerType === 'pen', ...(smoother ? { penSmoothing: 1 as const } : {}), points: [smoother?.push(first, event.timeStamp) ?? first] } }
+    this.active = { pointerId: event.pointerId, layerId: layer.id, predicted: [], smoother, stroke: { id: this.uuid.v4(), tool: settings.tool, color: settings.color, size: settings.size, opacity: settings.opacity, smoothing: settings.smoothing, pressure: settings.pressure && event.pointerType === 'pen', ...(smoother ? { penSmoothing: 1 as const } : {}), points: [smoother?.push(first, event.timeStamp) ?? first] } }
     this.schedulePreview(); this.updateReading(event, 1)
   }
   private move = (event: PointerEvent) => {

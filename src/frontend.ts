@@ -7,8 +7,10 @@ import { createDrawing, type Drawing, type SavedDrawing } from './model'
 import { chooseCanvasSize } from './new-page'
 import { styles } from './styles'
 import { PaletteStore } from './palette-store'
+import { requireFrontendUuid } from './uuid'
 
-export function setup(ctx: SpindleFrontendContext) {
+export function setup(context: SpindleFrontendContext) {
+  const ctx = requireFrontendUuid(context)
   const removeStyle = ctx.dom.addStyle(styles)
   const bridge = new BackendBridge(ctx)
   const palette = new PaletteStore(bridge)
@@ -33,7 +35,7 @@ export function setup(ctx: SpindleFrontendContext) {
     if (app) { tab.activate(); return }
     opening = true
     const opener = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
-    let drawing: Drawing = createDrawing()
+    let drawing: Drawing = createDrawing(ctx.uuid)
     try {
       const target = fresh ? undefined : id ?? await gallery.latest()
       if (unsavedRecovery) drawing = unsavedRecovery
@@ -41,7 +43,7 @@ export function setup(ctx: SpindleFrontendContext) {
       else {
         const size = await chooseCanvasSize(ctx)
         if (!size) { if (opener?.isConnected) opener.focus({ preventScroll: true }); return }
-        drawing = createDrawing(size.width, size.height)
+        drawing = createDrawing(ctx.uuid, size.width, size.height)
       }
       if (destroyed) return
       gallery.setActive(false)

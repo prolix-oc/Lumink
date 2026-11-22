@@ -1,3 +1,4 @@
+import { uuid } from './fixtures'
 import { describe, expect, test } from 'bun:test'
 import type { BackendBridge } from '../src/bridge'
 import { createDrawing, type Drawing, type DrawingSummary } from '../src/model'
@@ -13,7 +14,7 @@ describe('draft saving', () => {
       if (writes.length === 1) await blocked
       return summary(value.drawing)
     } } as unknown as BackendBridge
-    const saver = new DraftSaver(bridge, () => undefined, () => undefined), first = createDrawing()
+    const saver = new DraftSaver(bridge, () => undefined, () => undefined), first = createDrawing(uuid)
     const saving = saver.enqueue(first, '')
     const duplicate = saver.enqueue(first, '')
     const intermediate = { ...first, title: 'Partially typed' }, latest = { ...first, title: 'Final title' }
@@ -28,7 +29,7 @@ describe('draft saving', () => {
       if (fail) throw new Error('Offline')
       writes.push(value.drawing); return summary(value.drawing)
     } } as unknown as BackendBridge
-    const saver = new DraftSaver(bridge, () => undefined, () => undefined), drawing = createDrawing()
+    const saver = new DraftSaver(bridge, () => undefined, () => undefined), drawing = createDrawing(uuid)
     await expect(saver.enqueue(drawing, '')).rejects.toThrow('Offline')
     fail = false; await saver.flush()
     expect(writes).toEqual([drawing])

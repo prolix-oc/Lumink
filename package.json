@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@types/bun": "1.3.9",
-    "lumiverse-spindle-types": "0.6.46",
+    "lumiverse-spindle-types": "0.6.81",
     "playwright": "1.61.0",
     "typescript": "6.0.2"
   }

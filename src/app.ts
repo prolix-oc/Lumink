@@ -1,4 +1,5 @@
-import type { SpindleFrontendContext, SpindleTextInputHandle } from 'lumiverse-spindle-types'
+import type { SpindleTextInputHandle } from 'lumiverse-spindle-types'
+import type { UUIDFrontendContext } from './uuid'
 import { BackendBridge } from './bridge'
 import { ColorPicker } from './color-picker'
 import { DrawingInput, type BrushSettings, type PencilReading, type Camera } from './input'
@@ -41,7 +42,7 @@ export class DrawingPadApp {
   private settings: BrushSettings = { tool: 'ink', color: colors[0]!, size: 8, opacity: 1, smoothing: 0.25, pressure: true, penOnly: false, predictions: true }
   private paintSettings = { size: 8, opacity: 1 }
   private blendSettings = { size: 48, opacity: 0.6 }
-  constructor(private root: HTMLElement, private ctx: SpindleFrontendContext, private bridge: BackendBridge, private palette: PaletteStore, drawing: Drawing, libraryChanged: () => void, private close: () => void) {
+  constructor(private root: HTMLElement, private ctx: UUIDFrontendContext, private bridge: BackendBridge, private palette: PaletteStore, drawing: Drawing, libraryChanged: () => void, private close: () => void) {
     this.history = new DrawingHistory(validateDrawing(drawing))
     this.libraryChanged = libraryChanged
     root.innerHTML = `<section class="dp-app" aria-label="DrawingPad workspace">
@@ -94,7 +95,7 @@ export class DrawingPadApp {
       open: async id => { const saved = await bridge.call<SavedDrawing>('load', { id }); await this.load(saved.drawing) },
       remove: async id => {
         await bridge.call('delete', { id }); this.libraryChanged()
-        if (id === this.history.current.id) { this.dirty = false; this.selection.clear(); this.history.replace(createDrawing()); this.titleField.update({ value: this.history.current.title }); this.renderer.setDrawing(this.history.current); this.input.reset(); this.updateUi(); this.preparePng() }
+        if (id === this.history.current.id) { this.dirty = false; this.selection.clear(); this.history.replace(createDrawing(ctx.uuid)); this.titleField.update({ value: this.history.current.title }); this.renderer.setDrawing(this.history.current); this.input.reset(); this.updateUi(); this.preparePng() }
       },
       error: error => this.notice(error.message, true),
     })
@@ -111,7 +112,7 @@ export class DrawingPadApp {
       this.libraryChanged()
     }, error => { this.saveState('Not saved · retry in Sketchbook', 'error'); this.notice(error.message, true) })
     this.input = new DrawingInput(this.query('.dp-viewport'), this.query('.dp-sheet'), this.query('.dp-cursor'), () => this.history.current, () => this.settings,
-      preview => this.renderer.render(preview), (stroke, layerId) => this.commitStroke(stroke, layerId), reading => this.reading(reading), camera => this.camera(camera), message => this.notice(message, true), { undo: () => this.historyAction(false), selection: this.selection })
+      preview => this.renderer.render(preview), (stroke, layerId) => this.commitStroke(stroke, layerId), reading => this.reading(reading), camera => this.camera(camera), message => this.notice(message, true), { undo: () => this.historyAction(false), selection: this.selection }, ctx.uuid)
     this.titleField = ctx.components.mountTextInput(this.query('.dp-title-field'), { value: drawing.title, ariaLabel: 'Drawing title', onChange: value => {
       const title = value.slice(0, 100)
       if (title === this.history.current.title) return
@@ -272,7 +273,7 @@ export class DrawingPadApp {
       case 'close-layers': this.toggleLayers(false); break
       case 'deselect': this.input.cancelStroke(); this.selection.clear(); break
       case 'selection-done': this.selectTool('ink'); break
-      case 'add-layer': if (this.history.current.layers.length < MAX_LAYERS) { const id = crypto.randomUUID(); this.edit(d => ({ ...d, activeLayerId: id, layers: [...d.layers, { id, name: `Layer ${d.layers.length + 1}`, visible: true, opacity: 1, strokes: [] }] })) }; break
+      case 'add-layer': if (this.history.current.layers.length < MAX_LAYERS) { const id = this.ctx.uuid.v4(); this.edit(d => ({ ...d, activeLayerId: id, layers: [...d.layers, { id, name: `Layer ${d.layers.length + 1}`, visible: true, opacity: 1, strokes: [] }] })) }; break
       case 'delete-layer': if (this.history.current.layers.length > 1) this.edit(d => { const layers = d.layers.filter(layer => layer.id !== d.activeLayerId); return { ...d, layers, activeLayerId: layers.at(-1)!.id } }); break
       case 'clear-layer': this.editLayer(layer => ({ ...layer, strokes: [], selectionMoves: undefined })); this.notice('Layer cleared. Undo restores it.'); break
       case 'raise-layer': this.reorder(1); break
@@ -346,7 +347,7 @@ export class DrawingPadApp {
     if (this.destroyed) return
     this.query('.dp-viewport').focus({ preventScroll: true })
     if (!size) return
-    await this.load(createDrawing(size.width, size.height))
+    await this.load(createDrawing(this.ctx.uuid, size.width, size.height))
     this.changed(); this.notice('Fresh canvas. Your previous drawing is in the sketchbook.')
   }
   async showLibrary() {
@@ -368,7 +369,7 @@ export class DrawingPadApp {
     if (!files[0] || this.destroyed) return
     const drawing = validateDrawing(JSON.parse(new TextDecoder().decode(files[0].bytes)))
     // Import as a fresh page; never overwrite another saved page by its id.
-    await this.load({ ...drawing, id: crypto.randomUUID(), updatedAt: Date.now() }); this.changed(); this.notice('Editable drawing opened as a new sketchbook page.')
+    await this.load({ ...drawing, id: this.ctx.uuid.v4(), updatedAt: Date.now() }); this.changed(); this.notice('Editable drawing opened as a new sketchbook page.')
   }
   private async share() {
     if (!this.png || this.busy) return

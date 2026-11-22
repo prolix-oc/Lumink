@@ -1,3 +1,5 @@
+import type { SpindleFrontendUUIDAPI } from 'lumiverse-spindle-types'
+
 export const MAX_LAYERS = 6
 // Full-resolution PNG composition uses two RGBA buffers. Preview layers stay small.
 export const EXPORT_MEMORY_BUDGET = 128 * 1024 * 1024
@@ -60,11 +62,11 @@ export function canvasSizeError(width: unknown, height: unknown): string | null 
   if (bytes > EXPORT_MEMORY_BUDGET) return `PNG working memory would be ${(bytes / 1024 / 1024).toFixed(0)} MiB. The current export budget is 128 MiB; try a smaller canvas.`
   return null
 }
-export function createDrawing(width = 1200, height = 900): Drawing {
+export function createDrawing(uuid: Pick<SpindleFrontendUUIDAPI, 'v4'>, width = 1200, height = 900): Drawing {
   const error = canvasSizeError(width, height)
   if (error) throw new Error(error)
-  const layerId = crypto.randomUUID()
-  return { version: 1, id: crypto.randomUUID(), title: 'Untitled sketch', width, height, paper: 'plain', activeLayerId: layerId, updatedAt: Date.now(), layers: [{ id: layerId, name: 'Layer 1', visible: true, opacity: 1, strokes: [] }] }
+  const layerId = uuid.v4()
+  return { version: 1, id: uuid.v4(), title: 'Untitled sketch', width, height, paper: 'plain', activeLayerId: layerId, updatedAt: Date.now(), layers: [{ id: layerId, name: 'Layer 1', visible: true, opacity: 1, strokes: [] }] }
 }
 export function filename(title: string, extension = 'png'): string {
   return `${title.normalize('NFKC').replace(/[^\p{L}\p{N}_ -]/gu, '').trim().replace(/\s+/g, '-').slice(0, 80) || 'DrawingPad'}.${extension}`

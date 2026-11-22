@@ -1,10 +1,10 @@
-import type { SpindleFrontendContext } from 'lumiverse-spindle-types'
+import type { UUIDFrontendContext } from './uuid'
 import type { Reply } from './backend-handler'
 export class BackendBridge {
   private pending = new Map<string, { resolve: (result: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
   private unsubscribe: () => void
   private destroyed = false
-  constructor(private ctx: SpindleFrontendContext) {
+  constructor(private ctx: UUIDFrontendContext) {
     this.unsubscribe = ctx.onBackendMessage(payload => {
       const reply = payload as Reply
       if (!reply || reply.type !== 'drawingpad-reply') return
@@ -17,7 +17,7 @@ export class BackendBridge {
   }
   call<T>(action: string, data?: unknown): Promise<T> {
     if (this.destroyed) return Promise.reject(new Error('DrawingPad has closed.'))
-    const requestId = crypto.randomUUID()
+    const requestId = this.ctx.uuid.v7()
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error('DrawingPad’s backend did not respond. Your drawing is still on this page; export it or try again.')) }, 60_000)
       this.pending.set(requestId, { resolve: result => resolve(result as T), reject, timer })

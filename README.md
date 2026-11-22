@@ -1,6 +1,6 @@
 # DrawingPad
 
-A Spindle extension for sketching, handwritten notes, and sharing a little drawing with a conversation. Requires Lumiverse **1.2.5 or later**. The extension uses the existing host APIs and ships its own browser drawing surface.
+A Spindle extension for sketching, handwritten notes, and sharing a little drawing with a conversation. Requires Lumiverse **1.2.5 or later**. The host must provide the `frontend-uuid-v1` and `uuid-v1` UUID generation capabilities; update Lumiverse if DrawingPad reports either capability is missing. The extension uses the existing host APIs and ships its own browser drawing surface.
 
 ## What you can do
 

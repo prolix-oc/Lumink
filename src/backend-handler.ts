@@ -7,12 +7,13 @@ export interface Reply { type: 'drawingpad-reply'; requestId: string; ok: boolea
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 /** All filesystem and image work uses the documented, scoped Spindle APIs. */
 export function createBackendHandler(api: SpindleAPI) {
+  if (!api.uuid || (api.host.capabilities['uuid-v1'] ?? 0) < 1) throw new Error('DrawingPad requires UUID generation support (uuid-v1). Update Lumiverse.')
   const queues = new Map<string, Promise<unknown>>()
   async function operation(action: string, payload: unknown, userId: string | undefined) {
     const data = isObject(payload) ? payload : {}
     const path = () => { if (!isId(data.id)) throw new Error('Invalid drawing identifier.'); return `drawings/${data.id}.json` }
     const index = async () => readIndex(await api.userStorage.getJson<DrawingIndex | DrawingSummary[]>('drawings/index.json', { userId, fallback: [] }))
-    const writeIndex = async (entries: DrawingSummary[]) => api.userStorage.setJson('drawings/index.json', { version: 2, revision: crypto.randomUUID(), entries } satisfies DrawingIndex, { userId })
+    const writeIndex = async (entries: DrawingSummary[]) => api.userStorage.setJson('drawings/index.json', { version: 2, revision: await api.uuid.v4(), entries } satisfies DrawingIndex, { userId })
     switch (action) {
       case 'load-colors': return validatePalette(await api.userStorage.getJson<ColorPalette>('colors/palette.json', { userId, fallback: emptyPalette() }))
       case 'update-colors': {
@@ -43,7 +44,7 @@ export function createBackendHandler(api: SpindleAPI) {
         const drawing = validateDrawing(data.drawing)
         if (typeof data.thumbnail !== 'string' || !data.thumbnail.startsWith('data:image/png;base64,') || data.thumbnail.length > 100_000) throw new Error('Invalid sketch preview.')
         const { entries } = await index()
-        const summary: DrawingSummary = { id: drawing.id, title: drawing.title, width: drawing.width, height: drawing.height, updatedAt: drawing.updatedAt, previewVersion: crypto.randomUUID() }
+        const summary: DrawingSummary = { id: drawing.id, title: drawing.title, width: drawing.width, height: drawing.height, updatedAt: drawing.updatedAt, previewVersion: await api.uuid.v4() }
         await api.userStorage.setJson(`drawings/${drawing.id}.json`, { drawing }, { userId })
         await api.userStorage.setJson(`thumbnails/${drawing.id}.json`, { thumbnail: data.thumbnail, previewVersion: summary.previewVersion }, { userId })
         await writeIndex([summary, ...entries.filter(entry => entry.id !== drawing.id)])

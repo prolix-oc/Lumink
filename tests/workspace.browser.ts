@@ -1,3 +1,4 @@
+import { uuid } from './fixtures'
 import { chromium, webkit, type Page } from 'playwright'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -8,6 +9,8 @@ const base = 'http://127.0.0.1:4818'
 const server = Bun.spawn(['bun', 'run', 'scripts/demo-server.ts'], { cwd: project, env: { ...process.env, DRAWINGPAD_DEMO_PORT: '4818' }, stdout: 'pipe', stderr: 'pipe' })
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message) }
 async function open(page: Page) {
+  // Match HTTP/LAN hosts where only Spindle's UUID helper is available.
+  await page.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined }))
   await page.goto(base)
   await page.getByRole('button', { name: 'Open DrawingPad', exact: true }).click()
   if (await page.locator('.dp-new').isVisible()) await page.getByRole('button', { name: 'Create canvas', exact: true }).click()
@@ -191,8 +194,8 @@ try {
       } finally { await scaled.close() }
       const context = await browser.newContext({ viewport: { width: 1200, height: 1000 } })
       try {
-        const page = await context.newPage(), drawing = createDrawing()
-        drawing.layers[0]!.strokes = [{ id: crypto.randomUUID(), tool: 'ink', color: '#23202b', size: 8, opacity: 1, smoothing: 0, pressure: false, points: Array.from({ length: 125_000 }, () => [100.25, 200.75, 0.555, 0.123]) }]
+        const page = await context.newPage(), drawing = createDrawing(uuid)
+        drawing.layers[0]!.strokes = [{ id: uuid.v4(), tool: 'ink', color: '#23202b', size: 8, opacity: 1, smoothing: 0, pressure: false, points: Array.from({ length: 125_000 }, () => [100.25, 200.75, 0.555, 0.123]) }]
         const summary = { id: drawing.id, title: drawing.title, width: drawing.width, height: drawing.height, updatedAt: drawing.updatedAt }
         await page.addInitScript(({ drawing, summary }) => localStorage.setItem('drawingpad-demo', JSON.stringify({ 'drawings/index.json': JSON.stringify([summary]), [`drawings/${drawing.id}.json`]: JSON.stringify({ drawing }) })), { drawing, summary })
         await open(page)

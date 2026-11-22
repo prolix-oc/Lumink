@@ -1,3 +1,4 @@
+import { uuid } from './fixtures'
 import { describe, expect, test } from 'bun:test'
 import type { SpindleAPI } from 'lumiverse-spindle-types'
 import { createBackendHandler, type Reply } from '../src/backend-handler'
@@ -7,7 +8,10 @@ function fixture() {
   const files = new Map<string, unknown>(), replies: { user?: string; session?: string; reply: Reply }[] = [], reads: string[] = []
   let uploads = 0, deletes = 0
   const grants = new Set(['images', 'chat_mutation'])
+  const generatedIds: string[] = []
   const api = {
+    host: { capabilities: { 'uuid-v1': 1 } },
+    uuid: { v4: async () => { await Promise.resolve(); const id = uuid.v4(); generatedIds.push(id); return id } },
     userStorage: {
       getJson: async (path: string, options: { userId: string; fallback?: unknown }) => { const key = `${options.userId}/${path}`; reads.push(key); if (files.has(key)) return structuredClone(files.get(key)); if ('fallback' in options) return options.fallback; throw new Error('Missing drawing') },
       setJson: async (path: string, value: unknown, options: { userId: string }) => { await Promise.resolve(); files.set(`${options.userId}/${path}`, structuredClone(value)) },
@@ -19,13 +23,24 @@ function fixture() {
     sendToFrontend: (reply: Reply, user?: string, options?: { frontendSessionId: string }) => replies.push({ user, session: options?.frontendSessionId, reply }),
   } as unknown as SpindleAPI
   const handler = createBackendHandler(api)
-  const call = async (action: string, data: unknown, user = 'owner', session = 'document-a') => { const requestId = crypto.randomUUID(); await handler({ type: 'drawingpad-request', requestId, action, data }, user, session); return replies.find(item => item.reply.requestId === requestId)!.reply }
-  return { files, reads, replies, grants, handler, call, get uploads() { return uploads }, get deletes() { return deletes } }
+  const call = async (action: string, data: unknown, user = 'owner', session = 'document-a') => { const requestId = uuid.v4(); await handler({ type: 'drawingpad-request', requestId, action, data }, user, session); return replies.find(item => item.reply.requestId === requestId)!.reply }
+  return { files, reads, replies, grants, handler, call, generatedIds, get uploads() { return uploads }, get deletes() { return deletes } }
 }
 describe('scoped sketchbook backend', () => {
+  test('save and delete await host UUIDs for previews and catalog revisions', async () => {
+    const f = fixture(), drawing = createDrawing(uuid)
+    const result = await f.call('save', { drawing, thumbnail: 'data:image/png;base64,abc' })
+    expect(result.ok).toBe(true)
+    expect(f.generatedIds).toHaveLength(2)
+    expect((result.result as ThumbnailPreview).previewVersion).toBe(f.generatedIds[0]!)
+    expect((f.files.get('owner/drawings/index.json') as DrawingIndex).revision).toBe(f.generatedIds[1]!)
+    await f.call('delete', { id: drawing.id })
+    expect(f.generatedIds).toHaveLength(3)
+    expect((f.files.get('owner/drawings/index.json') as DrawingIndex).revision).toBe(f.generatedIds[2]!)
+  })
   test('large pages still save and reopen after exceeding the former document limits', async () => {
-    const f = fixture(), drawing = createDrawing()
-    drawing.layers[0]!.strokes = [{ id: crypto.randomUUID(), tool: 'ink', color: '#23202b', size: 8, opacity: 1, smoothing: 0, pressure: true, points: Array.from({ length: 125_000 }, () => [100.25, 200.75, 0.555, 0.123]) }]
+    const f = fixture(), drawing = createDrawing(uuid)
+    drawing.layers[0]!.strokes = [{ id: uuid.v4(), tool: 'ink', color: '#23202b', size: 8, opacity: 1, smoothing: 0, pressure: true, points: Array.from({ length: 125_000 }, () => [100.25, 200.75, 0.555, 0.123]) }]
     drawing.layers[0]!.selectionMoves = [{ strokeIndex: 1, polygon: [[90, 190], [110, 190], [110, 210], [90, 210]], offset: [20, 30] }]
     expect((await f.call('save', { drawing, thumbnail: 'data:image/png;base64,large' })).ok).toBe(true)
     const saved = (await f.call('load', { id: drawing.id })).result as SavedDrawing
@@ -46,7 +61,7 @@ describe('scoped sketchbook backend', () => {
     expect((await f.call('load-colors', {})).result).toEqual({ version: 1, recent: ['#aabbcc'], saved: ['#fedcba'] })
   })
   test('saves are isolated by user and replies return to the originating document', async () => {
-    const f = fixture(), drawing = createDrawing()
+    const f = fixture(), drawing = createDrawing(uuid)
     expect((await f.call('save', { drawing, thumbnail: 'data:image/png;base64,abc' })).ok).toBe(true)
     expect(((await f.call('list', {}, 'other')).result as CatalogPage).entries).toEqual([])
     expect((await f.call('load', { id: drawing.id }, 'other')).ok).toBe(false)
@@ -56,12 +71,12 @@ describe('scoped sketchbook backend', () => {
   })
   test('concurrent saves preserve both index entries', async () => {
     const f = fixture()
-    await Promise.all([f.call('save', { drawing: createDrawing(), thumbnail: 'data:image/png;base64,a' }), f.call('save', { drawing: createDrawing(), thumbnail: 'data:image/png;base64,b' })])
+    await Promise.all([f.call('save', { drawing: createDrawing(uuid), thumbnail: 'data:image/png;base64,a' }), f.call('save', { drawing: createDrawing(uuid), thumbnail: 'data:image/png;base64,b' })])
     expect(((await f.call('list', {})).result as CatalogPage).total).toBe(2)
   })
   test('a thousand legacy pages remain accessible; saving migrates only the index and has no page cap', async () => {
     const f = fixture(), thumbnail = 'data:image/png;base64,old'
-    const drawings = Array.from({ length: 1000 }, (_, i) => ({ ...createDrawing(), updatedAt: 1000 - i, title: `Page ${i}` }))
+    const drawings = Array.from({ length: 1000 }, (_, i) => ({ ...createDrawing(uuid), updatedAt: 1000 - i, title: `Page ${i}` }))
     const legacy = drawings.map(drawing => ({ id: drawing.id, title: drawing.title, width: drawing.width, height: drawing.height, updatedAt: drawing.updatedAt, thumbnail }))
     f.files.set('owner/drawings/index.json', legacy)
     for (const drawing of drawings) f.files.set(`owner/drawings/${drawing.id}.json`, { drawing, thumbnail })
@@ -69,7 +84,7 @@ describe('scoped sketchbook backend', () => {
     expect(first.total).toBe(1000); expect(first.entries).toHaveLength(64)
     expect(JSON.stringify(first)).not.toContain('data:image')
     expect((await f.call('thumbnail', { id: drawings[999]!.id })).result).toEqual({ thumbnail, previewVersion: '1' })
-    const saved = await f.call('save', { drawing: { ...createDrawing(), updatedAt: 2000 }, thumbnail: 'data:image/png;base64,new' })
+    const saved = await f.call('save', { drawing: { ...createDrawing(uuid), updatedAt: 2000 }, thumbnail: 'data:image/png;base64,new' })
     expect(saved.ok).toBe(true)
     const index = f.files.get('owner/drawings/index.json') as DrawingIndex
     expect(index.version).toBe(2); expect(index.entries).toHaveLength(1001)
@@ -87,7 +102,7 @@ describe('scoped sketchbook backend', () => {
     expect(((await f.call('list', {})).result as CatalogPage).total).toBe(1000)
   })
   test('preview reads avoid full documents, revisions invalidate caches even with identical timestamps, and deletion cleans previews', async () => {
-    const f = fixture(), drawing = createDrawing()
+    const f = fixture(), drawing = createDrawing(uuid)
     const first = await f.call('save', { drawing, thumbnail: 'data:image/png;base64,first' })
     f.reads.length = 0
     const preview = (await f.call('thumbnail', { id: drawing.id })).result as ThumbnailPreview
@@ -103,7 +118,7 @@ describe('scoped sketchbook backend', () => {
     expect((await f.call('thumbnail', { id: drawing.id })).ok).toBe(false)
   })
   test('page ranges are bounded and timestamp ties have a stable ordering', async () => {
-    const f = fixture(), drawings = Array.from({ length: 70 }, () => ({ ...createDrawing(), updatedAt: 100 }))
+    const f = fixture(), drawings = Array.from({ length: 70 }, () => ({ ...createDrawing(uuid), updatedAt: 100 }))
     await Promise.all(drawings.map(drawing => f.call('save', { drawing, thumbnail: 'data:image/png;base64,a' })))
     const first = (await f.call('list', { limit: 64 })).result as CatalogPage
     const last = (await f.call('list', { offset: 64, revision: first.revision })).result as CatalogPage
@@ -117,11 +132,11 @@ describe('scoped sketchbook backend', () => {
     const f = fixture()
     expect((await f.call('delete', { id: '../../config' })).ok).toBe(false)
     f.grants.delete('chat_mutation')
-    expect((await f.call('upload-image', { uploadId: crypto.randomUUID() })).ok).toBe(false)
+    expect((await f.call('upload-image', { uploadId: uuid.v4() })).ok).toBe(false)
     expect(f.uploads).toBe(0)
   })
   test('cannot consume another user’s staged PNG; successful uploads are cleaned up', async () => {
-    const f = fixture(), uploadId = crypto.randomUUID()
+    const f = fixture(), uploadId = uuid.v4()
     expect((await f.call('upload-image', { uploadId }, 'other')).ok).toBe(false)
     expect(f.uploads).toBe(0)
     expect((await f.call('upload-image', { uploadId })).ok).toBe(true)
